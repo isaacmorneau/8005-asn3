@@ -6,8 +6,7 @@
 void add_pairs(pairs ** restrict head, const char * restrict arg) {
     pairs * current;
     if (*head != NULL) {
-        current = *head;
-        for(; current->next != NULL; current = current->next);
+        for(current = *head; current->next != NULL; current = current->next);
         current->next = calloc(1, sizeof(pairs) + strlen(arg));
         current = current->next;
     } else {
