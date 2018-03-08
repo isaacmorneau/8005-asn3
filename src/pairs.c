@@ -5,12 +5,13 @@
 
 void add_pairs(pairs ** restrict head, const char * restrict arg) {
     pairs * current;
+    int len = strlen(arg) + 1;//+1 for null at the end
     if (*head != NULL) {
         for(current = *head; current->next != NULL; current = current->next);
-        current->next = calloc(1, sizeof(pairs) + strlen(arg));
+        current->next = calloc(1, sizeof(pairs) + len);
         current = current->next;
     } else {
-        current = calloc(1, sizeof(pairs) + strlen(arg));
+        current = calloc(1, sizeof(pairs) + len);
         *head = current;
     }
 
@@ -18,6 +19,12 @@ void add_pairs(pairs ** restrict head, const char * restrict arg) {
 
     strcpy(current->addr, arg);
     char * temp = strchr(current->addr, '@');
+
+    if (temp == NULL) {
+        printf("Incorrect record format for `%s`\n"
+                "Allowed formats: <IP>@<listening-port> or <IP>@<listening-port>:<forwarded-port>\n", arg);
+        exit(1);
+    }
 
     current->i_port = temp + 1;
     *temp = '\0';

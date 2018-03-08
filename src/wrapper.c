@@ -30,26 +30,6 @@ void set_fd_limit() {
     ensure(setrlimit(RLIMIT_NOFILE, &lim) != -1);
 }
 
-void enable_keepalive(int sockfd) {
-    int yes = 1;
-    int idle = 1;
-    int interval = 1;
-    int maxpkt = 10;
-
-    ensure(setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(int)) != -1);
-    ensure(setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(int)) != -1);
-    ensure(setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(int)) != -1);
-    ensure(setsockopt(sockfd, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(int)) != -1);
-}
-
-void set_recv_window(int sockfd) {
-    int rcvbuf = TCP_WINDOW_CAP;
-    int clamp = TCP_WINDOW_CAP/2;
-
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (char *)&rcvbuf, sizeof(rcvbuf));
-    setsockopt(sockfd, SOL_SOCKET, TCP_WINDOW_CLAMP, (char *)&clamp, sizeof(clamp));
-}
-
 void set_non_blocking (int sfd) {
     int flags;
     ensure((flags = fcntl(sfd, F_GETFL, 0)) != -1);
@@ -127,45 +107,41 @@ int make_bound(const char * port) {
 
 int forward_read(const directional_buffer * con) {
     int total = 0, ret;
-    for (;;) {
-        //read new data
-        ensure_nonblock((ret = splice(con->sockfd, 0, con->pipefd[1], 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
-        if (ret == -1) {//eagain all data read
-            break;
-        } else if (ret == 0) {//actually means the connection was closed
-            return 0;//notify caller that the connection closed
-        }
-
-        //forward the data out
-        for (;;) {
-            ensure_nonblock((ret = splice(con->pipefd[0], 0, con->paired->sockfd, 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
-            if (ret == -1) break;
-            total += ret;
-        }
-        if (ret <= 0) {
-            break;
-        }
+read:
+    //read new data
+    ensure_nonblock((ret = splice(con->sockfd, 0, con->pipefd[1], 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
+    if (ret == -1) {//eagain all data read
+        return total;
+    } else if (ret == 0) {//actually means the connection was closed
+        return 0;//notify caller that the connection closed
     }
-    return total;
-}
 
-int forward_flush(const directional_buffer * con) {
-    int total = 0, ret;
+    //forward the data out
     for (;;) {
         ensure_nonblock((ret = splice(con->pipefd[0], 0, con->paired->sockfd, 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
         if (ret == -1) break;
         total += ret;
     }
-    return total;
+    if (ret <= 0) {
+        return total;
+    }
+    goto read;
+}
+
+int forward_flush(const directional_buffer * con) {
+    int total = 0, ret;
+flush:
+    ensure_nonblock((ret = splice(con->pipefd[0], 0, con->paired->sockfd, 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
+    if (ret == -1) return total;
+    total += ret;
+    goto flush;
 }
 
 void init_directional_buffer(directional_buffer * in_con, directional_buffer * out_con, int in_fd, int out_fd) {
     ensure(pipe(in_con->pipefd) == 0);
     ensure(pipe(out_con->pipefd) == 0);
-
     in_con->sockfd = in_fd;
     out_con->sockfd = out_fd;
-
     //link them
     in_con->paired = out_con;
     out_con->paired = in_con;
@@ -173,9 +149,6 @@ void init_directional_buffer(directional_buffer * in_con, directional_buffer * o
 
 //will exit if the other side is already closed
 void close_directional_buffer(directional_buffer * con) {
-    if (!con->paired) {
-        return;
-    }
     close(con->sockfd);
     close(con->pipefd[0]);
     close(con->pipefd[1]);
@@ -184,5 +157,9 @@ void close_directional_buffer(directional_buffer * con) {
     close(con->paired->pipefd[0]);
     close(con->paired->pipefd[1]);
 
-    con->paired = 0;
+    if (!con->paired) {
+        return;
+    }
+    con->paired->paired = 0;
+    free(con);
 }

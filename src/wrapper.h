@@ -4,11 +4,6 @@
 #include <stdlib.h>
 #include "common.h"
 #define MAXEVENTS 256
-/*
- * [inside]   [forwarder] [outside]
- * out_socket <         < in_socket
- * out_socket >         > in_socket
- * */
 struct directional_buffer;
 
 typedef struct directional_buffer {
@@ -22,8 +17,6 @@ void init_directional_buffer(directional_buffer * in_con, directional_buffer * o
 
 void set_fd_limit();
 void set_non_blocking(int sfd);
-void set_recv_window(int sockfd);
-void enable_keepalive(int sockfd);
 
 int make_bound(const char * port);
 int make_connected(const char * address, const char * port);

@@ -6,6 +6,7 @@ typedef struct pairs {
     char * addr;
     char * i_port;
     char * o_port;
+    int sockfd;
     struct pairs * next;
 } pairs;
 
