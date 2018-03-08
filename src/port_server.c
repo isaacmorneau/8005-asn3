@@ -37,6 +37,7 @@ void * port_handler(void * pass_pos) {
     pthread_cond_wait(&thread_cvs[pos], &thread_mts[pos]);
 
     int n, i;
+
 waiting:
     n = epoll_wait(efd, events, MAXEVENTS, -1);
     for (i = 0; i < n; i++) {
@@ -49,7 +50,6 @@ waiting:
                 //regular incomming message echo it back
                 forward_read(events[i].data.ptr);
             }
-
             if((events[i].events & EPOLLOUT)) {
                 //we are now notified that we can send the rest of the data
                 //possible but unlikely, handle it anyway
@@ -128,12 +128,9 @@ listening:
             close(((pairs *)events[i].data.ptr)->sockfd);
         } else { //EPOLLIN
             struct sockaddr in_addr;
-            socklen_t in_len;
+            socklen_t in_len = sizeof(in_addr);
             int infd, outfd;
 accepting:
-
-            in_len = sizeof(in_addr);
-
             infd = accept(((const pairs *)events[i].data.ptr)->sockfd, &in_addr, &in_len);
             if (infd == -1) {
                 if (errno != EAGAIN) {

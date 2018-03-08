@@ -117,15 +117,13 @@ read:
     }
 
     //forward the data out
-    for (;;) {
-        ensure_nonblock((ret = splice(con->pipefd[0], 0, con->paired->sockfd, 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
-        if (ret == -1) break;
-        total += ret;
-    }
+readflush:
+    ensure_nonblock((ret = splice(con->pipefd[0], 0, con->paired->sockfd, 0, UINT_MAX, SPLICE_F_MORE | SPLICE_F_NONBLOCK)) != -1);
     if (ret <= 0) {
-        return total;
+        goto read;
     }
-    goto read;
+    total += ret;
+    goto readflush;
 }
 
 int forward_flush(const directional_buffer * con) {
