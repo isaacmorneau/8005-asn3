@@ -8,6 +8,7 @@
 #include <getopt.h>
 
 #include "port_server.h"
+#include "pairs.h"
 #include "common.h"
 #include "wrapper.h"
 
@@ -15,7 +16,8 @@
 
 void print_help(void){
     puts("usage options:\n"
-            "\t-[-p]airs <address@inport:[outport||same],...> - comma seperated list of addresss port pairs\n"
+            "\t-[-p]airs <address@inport:[outport||same]> - multiple flags for each forwarding pair\n"
+            "\t\t-p example.com@3000:80 - redirects traffic locally from port 3000 to port 80 on example.com\n"
             "\t-[-c]onfig <default ./config> - the config for setting up ports\n"
             "\t-[-h]elp - this message");
 }
@@ -27,7 +29,8 @@ int main (int argc, char *argv[]) {
     }
 
     int c;
-    char * pairs = "";
+    pairs * pairs_list = NULL;
+    int total = 0;
     char * config = 0;
 
     while (1) {
@@ -47,7 +50,7 @@ int main (int argc, char *argv[]) {
 
         switch (c) {
             case 'p':
-                pairs = optarg;
+                add_pairs(&pairs_list, optarg);
                 break;
             case 'c':
                 config = optarg;
@@ -60,10 +63,10 @@ int main (int argc, char *argv[]) {
         }
     }
 
-    set_fd_limit();
-    //TODO parse the args into the ports list
-    pairs * pairs_list;
-    int total = 0;
-    port_server(pairs_list, total);
+    print_pairs(pairs_list);
+
+    //set_fd_limit();
+    //port_server(pairs_list, total);
+    free_pairs(pairs_list);
     return 0;
 }
