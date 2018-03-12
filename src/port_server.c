@@ -12,8 +12,7 @@
 #include <pthread.h>
 #include <signal.h>
 
-#include "wrapper.h"
-#include "common.h"
+#include "wrappers/wrapper.h"
 #include "port_server.h"
 
 static pthread_cond_t * thread_cvs;
@@ -98,7 +97,7 @@ void port_server(pairs * restrict head) {
     //add all the ports we are listening on
     for(pairs * current = head; current != NULL; current = current->next) {
         //make and bind the socket
-        int sfd = make_bound(current->i_port);
+        int sfd = make_bound_tcp(current->i_port);
         set_non_blocking(sfd);
 
         ensure(listen(sfd, SOMAXCONN) != -1);
