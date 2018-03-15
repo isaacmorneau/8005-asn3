@@ -99,7 +99,7 @@ void port_server(pairs * restrict head) {
         int sfd = make_bound_tcp(current->i_port);
         set_non_blocking(sfd);
 
-        ensure(listen(sfd, SOMAXCONN) != -1);
+        set_listening(sfd);
 
         current->sockfd = sfd;
         add_epoll_ptr(efd, sfd, current);
