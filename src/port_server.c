@@ -31,7 +31,7 @@ void * port_handler(void * pass_pos) {
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
     // Buffer where events are returned
-    events = calloc(MAXEVENTS, sizeof(struct epoll_event));
+    events = make_epoll_events();
 
     pthread_cond_wait(&thread_cvs[pos], &thread_mts[pos]);
 
@@ -40,19 +40,19 @@ void * port_handler(void * pass_pos) {
 waiting:
     n = epoll_wait(efd, events, MAXEVENTS, -1);
     for (i = 0; i < n; i++) {
-        if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
+        if (EVENT_ERR(events, i) || EVENT_HUP(events, i)) {
             // A socket got closed
-            close_directional_buffer(events[i].data.ptr);
+            close_directional_buffer(EVENT_PTR(events, i));
             goto waiting;
         } else {
-            if((events[i].events & EPOLLIN)) {
+            if(EVENT_IN(events, i)) {
                 //regular incomming message echo it back
-                forward_read(events[i].data.ptr);
+                forward_read(EVENT_PTR(events, i));
             }
-            if((events[i].events & EPOLLOUT)) {
+            if(EVENT_OUT(events, i)) {
                 //we are now notified that we can send the rest of the data
                 //possible but unlikely, handle it anyway
-                forward_flush(events[i].data.ptr);
+                forward_flush(EVENT_PTR(events, i));
             }
         }
     }
@@ -69,14 +69,13 @@ void port_server(pairs * restrict head) {
     epollfds = calloc(total_threads, sizeof(int));
     thread_cvs = calloc(total_threads, sizeof(pthread_cond_t));
     thread_mts = calloc(total_threads, sizeof(pthread_mutex_t));
-    struct epoll_event event;
     struct epoll_event *events;
     int epoll_pos = 0;
 
     //make the epolls for the threads
     //then pass them to each of the threads
     for (int i = 0; i < total_threads; ++i) {
-        ensure((epollfds[i] = epoll_create1(0)) != -1);
+        epollfds[i] = make_epoll();
         pthread_cond_init(&thread_cvs[i], NULL);
         pthread_mutex_init(&thread_mts[i], NULL);
 
@@ -89,11 +88,11 @@ void port_server(pairs * restrict head) {
         ensure(pthread_create(&tid, &attr, &port_handler, (void *)thread_num) == 0);
         ensure(pthread_attr_destroy(&attr) == 0);
         ensure(pthread_detach(tid) == 0);//be free!!
-        printf("thread %d on epoll fd %d\n", i, epollfds[i]);
+        printf("worker thread %d started\n", i);
     }
 
     //listening epoll
-    ensure((efd = epoll_create1(0)) != -1);
+    efd = make_epoll();
     //add all the ports we are listening on
     for(pairs * current = head; current != NULL; current = current->next) {
         //make and bind the socket
@@ -103,16 +102,11 @@ void port_server(pairs * restrict head) {
         ensure(listen(sfd, SOMAXCONN) != -1);
 
         current->sockfd = sfd;
-        event.data.ptr = current;
-
-        event.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
-        ensure(epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event) != -1);
+        add_epoll_ptr(efd, sfd, current);
     }
 
     // Buffer where events are returned
-    events = calloc(MAXEVENTS, sizeof(event));
-    //events never change, set them up front
-    event.events = EPOLLET | EPOLLEXCLUSIVE | EPOLLIN | EPOLLOUT;
+    events = make_epoll_events();
 
     directional_buffer * inbuff, * outbuff;
     //threads will handle the clients, the main thread will just add new ones
@@ -121,16 +115,17 @@ listening:
     //printf("current scale: %d\n",scaleback);
     n = epoll_wait(efd, events, MAXEVENTS, -1);
     for (i = 0; i < n; i++) {
-        if (events[i].events & EPOLLERR) {
+        if (EVENT_ERR(events, i)) {
             perror("epoll_wait, listen error");
-        } else if (events[i].events & EPOLLHUP) {
-            close(((pairs *)events[i].data.ptr)->sockfd);
-        } else { //EPOLLIN
+        } else if (EVENT_HUP(events, i)) {
+            close(((pairs *)EVENT_PTR(events, i))->sockfd);
+        } else if (EVENT_IN(events, i)){ //EPOLLIN
             struct sockaddr in_addr;
             socklen_t in_len = sizeof(in_addr);
             int infd, outfd;
+            const pairs * pair = (const pairs *)EVENT_PTR(events, i);
 accepting:
-            infd = accept(((const pairs *)events[i].data.ptr)->sockfd, &in_addr, &in_len);
+            infd = accept(pair->sockfd, &in_addr, &in_len);
             if (infd == -1) {
                 if (errno != EAGAIN) {
                     perror("accept");
@@ -141,7 +136,7 @@ accepting:
             // Make the incoming socket non-blocking and add it to the
             // list of fds to monitor.
             set_non_blocking(infd);
-            outfd = make_connected(((const pairs *)events[i].data.ptr)->addr, ((const pairs *)events[i].data.ptr)->o_port);
+            outfd = make_connected(pair->addr, pair->o_port);
             set_non_blocking(outfd);
 
             ensure(inbuff = calloc(1, sizeof(directional_buffer)));
@@ -150,14 +145,13 @@ accepting:
             init_directional_buffer(inbuff, outbuff, infd, outfd);
 
             //round robin client addition
-            event.data.ptr = inbuff;
-            ensure(epoll_ctl(epollfds[epoll_pos % total_threads], EPOLL_CTL_ADD, infd, &event) != -1);
-            event.data.ptr = outbuff;
-            ensure(epoll_ctl(epollfds[epoll_pos % total_threads], EPOLL_CTL_ADD, outfd, &event) != -1);
+            add_epoll_ptr(epollfds[epoll_pos % total_threads], infd, inbuff);
+            add_epoll_ptr(epollfds[epoll_pos % total_threads], outfd, outbuff);
 
             if (epoll_pos < total_threads) {
-                pthread_cond_signal(&thread_cvs[epoll_pos++]);
+                pthread_cond_signal(&thread_cvs[epoll_pos]);
             }
+            ++epoll_pos;
             goto accepting;
         }
     }

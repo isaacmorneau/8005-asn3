@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.2)
 project (8005-asn3)
 
 set (8005-asn3_VERSION_MAJOR 1)
@@ -18,14 +18,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 add_definitions(-D_POSIX_C_SOURCE=200809L)
 add_definitions(-D_DEFAULT_SOURCE)
 
-include_directories(src)
-
-file(GLOB MAIN
-    "src/*.c"
-    "src/*.cpp"
+file(GLOB_RECURSE MAIN
+    "src/**.c"
     )
 
 add_executable(8005-asn3 ${MAIN})
+target_include_directories(8005-asn3 PUBLIC "src" "src/wrappers")
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
