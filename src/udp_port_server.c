@@ -15,81 +15,9 @@
 #include "wrappers/wrapper.h"
 #include "tcp_port_server.h"
 
-static pthread_cond_t * thread_cvs;
-static pthread_mutex_t * thread_mts;
-int * epollfds;
-
-void * sock_handler(void * pass_pos) {
-    int pos = *((int*)pass_pos);
-    int efd = epollfds[pos];
-    struct epoll_event *events;
-    cpu_set_t cpuset;
-
-    CPU_ZERO(&cpuset);
-    CPU_SET(pos, &cpuset);
-
-    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-
-    // Buffer where events are returned
-    events = make_epoll_events();
-
-    pthread_cond_wait(&thread_cvs[pos], &thread_mts[pos]);
-
-    int n, i;
-
-waiting:
-    n = epoll_wait(efd, events, MAXEVENTS, -1);
-    for (i = 0; i < n; i++) {
-        if (EVENT_ERR(events, i) || EVENT_HUP(events, i)) {
-            // A socket got closed
-            close_directional_buffer(EVENT_PTR(events, i));
-            goto waiting;
-        } else {
-            if(EVENT_IN(events, i)) {
-                //regular incomming message echo it back
-                forward_read(EVENT_PTR(events, i));
-            }
-            if(EVENT_OUT(events, i)) {
-                //we are now notified that we can send the rest of the data
-                //possible but unlikely, handle it anyway
-                forward_flush(EVENT_PTR(events, i));
-            }
-        }
-    }
-    goto waiting;
-
-    free(events);
-    free(pass_pos);
-    return 0;
-}
-
 void udp_port_server(pairs * restrict head) {
     int efd;
-    int total_threads = get_nprocs();
-    epollfds = calloc(total_threads, sizeof(int));
-    thread_cvs = calloc(total_threads, sizeof(pthread_cond_t));
-    thread_mts = calloc(total_threads, sizeof(pthread_mutex_t));
     struct epoll_event *events;
-    int epoll_pos = 0;
-
-    //make the epolls for the threads
-    //then pass them to each of the threads
-    for (int i = 0; i < total_threads; ++i) {
-        epollfds[i] = make_epoll();
-        pthread_cond_init(&thread_cvs[i], NULL);
-        pthread_mutex_init(&thread_mts[i], NULL);
-
-        pthread_attr_t attr;
-        pthread_t tid;
-
-        ensure(pthread_attr_init(&attr) == 0);
-        int * thread_num = malloc(sizeof(int));
-        *thread_num = i;
-        ensure(pthread_create(&tid, &attr, &sock_handler, (void *)thread_num) == 0);
-        ensure(pthread_attr_destroy(&attr) == 0);
-        ensure(pthread_detach(tid) == 0);//be free!!
-        printf("worker thread %d started\n", i);
-    }
 
     //listening epoll
     efd = make_epoll();
@@ -136,15 +64,7 @@ waiting:
     }
     goto waiting;
 
-    //cleanup all fds and memory
-    for (int i = 0; i < total_threads; ++total_threads) {
-        close(epollfds[i]);
-    }
     close(efd);
-
-    free(epollfds);
-    free(thread_cvs);
-    free(thread_mts);
 
     free(events);
 }

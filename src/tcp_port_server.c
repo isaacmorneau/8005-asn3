@@ -88,7 +88,6 @@ void tcp_port_server(pairs * restrict head) {
         ensure(pthread_create(&tid, &attr, &port_handler, (void *)thread_num) == 0);
         ensure(pthread_attr_destroy(&attr) == 0);
         ensure(pthread_detach(tid) == 0);//be free!!
-        printf("worker thread %d started\n", i);
     }
 
     //listening epoll
@@ -136,8 +135,10 @@ accepting:
             // Make the incoming socket non-blocking and add it to the
             // list of fds to monitor.
             set_non_blocking(infd);
+            set_fast(infd);
             outfd = make_connected(pair->addr, pair->o_port);
             set_non_blocking(outfd);
+            set_fast(outfd);
 
             ensure(inbuff = calloc(1, sizeof(directional_buffer)));
             ensure(outbuff = calloc(1, sizeof(directional_buffer)));
