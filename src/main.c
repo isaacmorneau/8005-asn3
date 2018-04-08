@@ -7,17 +7,18 @@
 #include <sys/epoll.h>
 #include <getopt.h>
 
-#include "port_server.h"
-#include "pairs.h"
+#include "tcp_port_server.h"
+#include "udp_port_server.h"
 #include "wrappers/wrapper.h"
 
-#define SOCKOPTS "p:"
+#define SOCKOPTS "tup:"
 
 static inline void print_help(void){
     puts("usage options:\n"
             "\t-[-p]airs <address@inport[:outport]> - multiple flags for each forwarding pair\n"
             "\t\t-p example.com@3000:80 - redirects traffic locally from port 3000 to port 80 on example.com\n"
-            "\t-[-c]onfig <default ./config> - the config for setting up ports\n"
+            "\t-[-t]cp - switch to tcp pairs(default)\n"
+            "\t-[-u]dp - switch to udp pairs\n"
             "\t-[-h]elp - this message");
 }
 
@@ -29,15 +30,16 @@ int main (int argc, char *argv[]) {
 
     int c;
     pairs * pairs_list = NULL;
-    char * config = 0;
+    int mode = 1;
 
     int option_index = 0;
 
     static struct option long_options[] = {
-        {"pairs",  required_argument, 0, 'p' },
-        {"config", optional_argument, 0, 'c' },
-        {"help",   no_argument,       0, 'h' },
-        {0,        0,                 0, 0   }
+        {"pairs", required_argument, 0, 'p' },
+        {"udp",   no_argument,       0, 'u' },
+        {"tcp",   no_argument,       0, 't' },
+        {"help",  no_argument,       0, 'h' },
+        {0,       0,                 0, 0   }
     };
 args:
     c = getopt_long(argc, argv, SOCKOPTS, long_options, &option_index);
@@ -49,8 +51,11 @@ args:
         case 'p':
             add_pairs(&pairs_list, optarg);
             break;
-        case 'c':
-            config = optarg;
+        case 't':
+            mode = 1;
+            break;
+        case 'u':
+            mode = 2;
             break;
         case 'h':
         case '?':
@@ -69,7 +74,11 @@ start:
     print_pairs(pairs_list);
 
     //set_fd_limit();
-    port_server(pairs_list);
+    if (mode == 1) {
+        tcp_port_server(pairs_list);
+    } else {
+        udp_port_server(pairs_list);
+    }
     free_pairs(pairs_list);
     return 0;
 }
