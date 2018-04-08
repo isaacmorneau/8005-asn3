@@ -15,6 +15,14 @@
 #include "wrappers/wrapper.h"
 #include "tcp_port_server.h"
 
+/*
+ * Author & Designer: Isaac Morneau
+ * Date: 08-04-2018
+ * Function: udp_port_server
+ * Paramaters: pairs * head - the list of rules for what ports to forward
+ * Return: void
+ * Notes: makes the epoll instances and handles forwarding the traffic
+ * */
 void udp_port_server(pairs * restrict head) {
     int efd;
     struct epoll_event *events;
@@ -44,10 +52,8 @@ void udp_port_server(pairs * restrict head) {
         add_epoll_ptr(efd, ifd, in_buf);
         add_epoll_ptr(efd, ofd, out_buf);
     }
-
     // Buffer where events are returned
     events = make_epoll_events();
-
     //threads will handle the clients, the main thread will just add new ones
     int n, i;
 waiting:
@@ -63,9 +69,7 @@ waiting:
         }
     }
     goto waiting;
-
     close(efd);
-
     free(events);
 }
 

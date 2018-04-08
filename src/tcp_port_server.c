@@ -19,6 +19,14 @@ static pthread_cond_t * thread_cvs;
 static pthread_mutex_t * thread_mts;
 int * epollfds;
 
+/*
+ * Author & Designer: Isaac Morneau
+ * Date: 08-04-2018
+ * Function: port handler
+ * Paramaters: void * pass_pos - the position for the shared epoll data
+ * Return: void * - not used
+ * Notes: the threaded function for forwarding the traffic
+ * */
 void * port_handler(void * pass_pos) {
     int pos = *((int*)pass_pos);
     int efd = epollfds[pos];
@@ -62,7 +70,14 @@ waiting:
     free(pass_pos);
     return 0;
 }
-
+/*
+ * Author & Designer: Isaac Morneau
+ * Date: 08-04-2018
+ * Function: tcp_port_server
+ * Paramaters: pairs * head - the list of rules for what ports to forward
+ * Return: void
+ * Notes: makes the epoll instances and threads while accepting 
+ * */
 void tcp_port_server(pairs * restrict head) {
     int efd;
     int total_threads = get_nprocs();
